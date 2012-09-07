@@ -4,9 +4,9 @@
 #include "libfreenect.h"
 #include "libfreenect_sync.h"
 
-#include "Serial\BufferedAsyncSerial.h"
+#include "Serial/BufferedAsyncSerial.h"
 #include <boost/algorithm/string.hpp>
-#include <boost\lexical_cast.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +30,7 @@ bool displayKinect = true;
 bool displayQuat = true;
 bool homing = false;
 bool color = true;
+
 int window;
 GLuint gl_rgb_tex;
 int mx = -1, my = -1; // Prevous mouse coordinates
@@ -512,7 +513,9 @@ void drawFPS()
 
 void drawDebug()
 {
-
+	//--------------------------------------------------------------------------
+	//Serial Message
+	//--------------------------------------------------------------------------
 	if (commError)
 	{
 		glColor3f(1, 0, 0);
@@ -525,6 +528,9 @@ void drawDebug()
 		print_bitmap_string(commMsg, -(width / 2 - 9), height / 2 - 15);
 	}
 
+	//--------------------------------------------------------------------------
+	//Kinect Message
+	//--------------------------------------------------------------------------
 	if (noKinect)
 	{
 		glColor3f(1, 0, 0);
@@ -540,17 +546,31 @@ void drawDebug()
 				height / 2 - 2 * 15);
 	}
 
+	//--------------------------------------------------------------------------
+	//FPS
+	//--------------------------------------------------------------------------
+
 	drawFPS();
 
+	//--------------------------------------------------------------------------
+	//Missed Serial Packets info
+	//--------------------------------------------------------------------------
 	glColor3f(0, 1, 1);
 	char msg[50];
 	sprintf(msg, "Missed: %4d  Total: %4d   Ratio: %4.2f", missed, total,
 			(float) missed / total);
 	print_bitmap_string(msg, -(width / 2 - 9), height / 2 - 4 * 15);
 
+
+	//--------------------------------------------------------------------------
+	//Coord Rotations
+	//--------------------------------------------------------------------------
 	sprintf(msg, "RotX: %d     RotY: %d", rotangles[0], rotangles[1]);
 	print_bitmap_string(msg, -(width / 2 - 9), height / 2 - 5 * 15);
 
+	//--------------------------------------------------------------------------
+	//Quaternion Homing Info
+	//--------------------------------------------------------------------------
 	char msg2[50];
 	if (homing)
 		sprintf(msg2, "< %3.2f , %3.2f , %3.2f , %3.2f >", hQ[0], hQ[1], hQ[2],
@@ -559,6 +579,26 @@ void drawDebug()
 		sprintf(msg2, "OFF");
 	sprintf(msg, "Q Home: %s", msg2);
 	print_bitmap_string(msg, -(width / 2 - 9), height / 2 - 6 * 15);
+
+	//--------------------------------------------------------------------------
+	//Key Map Directions
+	//--------------------------------------------------------------------------
+	char* msg3[] ={"[ESC]   -  Close the Application",
+				   "[SPACE] -  Reset View Rotation",
+				   "[w]     -  Zoom In",
+			       "[s]     -  Zoom Out",
+			       "[d]     -  Toggle Debug Display",
+			       "[k]     -  Toggle Kinect Display",
+			       "[q]     -  Toggle Quaternion Display",
+			       "[h]     -  Home The Quaternion",
+			       "[n]     -  Cancel Quaternion Homing",
+			       "[c]     -  Toggle Color Display"
+					};
+	glColor3f(1, 1, 1);
+	for(int i =0; i<10; i++)
+	{
+		print_bitmap_string(msg3[i], -(width / 2 - 9), height/2 - (15+i)*15);
+	}
 }
 
 void DrawGLScene()
