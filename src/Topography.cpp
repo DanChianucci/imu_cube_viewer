@@ -1,91 +1,138 @@
-#define _WIN32_WINNT 0x0501
-#define WINVER 0x0501
+//============================================================================
+// Name        : Topagraphy.cpp
+// Author      : Dan Chianucci
+// Description : OpenGL App which collects data from a Kinecgt Sensor as well
+//				 as an IMU and displays relevant data onscreen.
+//============================================================================
+#include "Topography.h"
 
-#include "libfreenect.h"
-#include "libfreenect_sync.h"
 
-#include "Serial/BufferedAsyncSerial.h"
-#include <boost/algorithm/string.hpp>
-#include <boost/lexical_cast.hpp>
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <vector>
-
-#define PERIOD 50
-
-#if defined(__APPLE__)
-#	include <GLUT/glut.h>
-#	include <OpenGL/gl.h>
-#	include <OpenGL/glu.h>
-#else
-#	include <GL/glut.h>
-#	include <GL/gl.h>
-#	include <GL/glu.h>
-#endif
-
-bool displayDebug = true;
-bool displayKinect = true;
-bool displayQuat = true;
-bool homing = false;
-bool color = true;
-
-int window;
-GLuint gl_rgb_tex;
-int mx = -1, my = -1; // Prevous mouse coordinates
-int rotangles[2] =
-{ 0 }; // Panning angles
-float zoom = 66; // zoom factor
-int width, height;
-
-float euler[3];
-float quat[4];
-float hQ[4];
-
-BufferedAsyncSerial myPort;
-int commError;
-char commMsg[50];
-
-const char * port = "COM8";
-int baud = 19200;
-
-bool noKinect;
-short *depth = 0;
-char *rgb = 0;
-uint32_t ts;
-
-long missed = 0;
-long total = 0;
-
-int frameCount;
-int previousTime;
-float fps = 0;
-
-void quatConj(float * result, float * q);
-
-void LoadVertexMatrix()
+int main(int argc, char **argv)
 {
-	float fx = 594.21f;
-	float fy = 591.04f;
-	float a = -0.0030711f;
-	float b = 3.3309495f;
-	float cx = 339.5f;
-	float cy = 242.7f;
-	GLfloat mat[16] =
-	{ 1 / fx, 0, 0, 0, 0, -1 / fy, 0, 0, 0, 0, 0, a, -cx / fx, cy / fy, -1, b };
-	glMultMatrixf(mat);
+	initSerialComms();
+	initKinectComms();
+
+	width = 640;
+	height = 480;
+	glutInit(&argc, argv);
+
+	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
+	glutInitWindowSize(width, height);
+	glutInitWindowPosition(0, 0);
+
+	window = glutCreateWindow("LibFreenect");
+
+	glutDisplayFunc(&DrawGLScene);
+	glutIdleFunc(&UpdateData);
+	glutReshapeFunc(&ResizeGLScene);
+	glutKeyboardFunc(&keyPressed);
+	glutMotionFunc(&mouseMoved);
+	glutMouseFunc(&mousePress);
+	InitGL(width, height);
+
+	glutMainLoop();
+
+	return 0;
 }
 
-void LoadRGBMatrix()
+void initSerialComms()
 {
-	float mat[16] =
-	{ 5.34866271e+02, 3.89654806e+00, 0.00000000e+00, 1.74704200e-02,
-			-4.70724694e+00, -5.28843603e+02, 0.00000000e+00, -1.22753400e-02,
-			-3.19670762e+02, -2.60999685e+02, 0.00000000e+00, -9.99772000e-01,
-			-6.98445586e+00, 3.31139785e+00, 0.00000000e+00, 1.09167360e-02 };
-	glMultMatrixf(mat);
+	printf("Opening Serial Comms\n");
+	commError = 0;
+	sprintf(commMsg, "IMU connected\n");
+
+	try
+	{
+		myPort.open(port, baud);
+	} catch (...)
+	{
+	}
+
+	if (!myPort.isOpen())
+	{
+		sprintf(commMsg, "Failed %s @ %d bps\n", port, baud);
+		commError = 1;
+		printf(commMsg);
+		return;
+	}
+
+	boost::this_thread::sleep(boost::posix_time::milliseconds(500));
+
+	printf("\tSending WHOAMI\n");
+	myPort.write("????.", 5);
+	myPort.flush();
+
+	boost::this_thread::sleep(boost::posix_time::seconds(1));
+
+	std::string response = myPort.readStringUntil("\r\n");
+
+	printf("\tResponse: %s\n", response.c_str());
+
+	int numBytes = strlen(response.c_str());
+
+	if (numBytes > 0)
+	{
+		if (response.compare("I am an AHRSuIMU") == 0)
+		{
+			sprintf(commMsg, "IMU Connected");
+			commError = 0;
+		}
+
+		else
+		{
+			sprintf(commMsg, "Unexpected IMU Response");
+			commError = 2;
+		}
+	}
+
+	else
+	{
+		sprintf(commMsg, "No IMU Response");
+		commError = 3;
+	}
+
+	printf("%s\n\n",commMsg);
+	return;
 }
+
+void initKinectComms()
+{
+	printf("Initialising Kinect\n");
+	noKinect = false;
+
+
+	if (freenect_sync_get_depth((void**) &depth, &ts, 0, FREENECT_DEPTH_11BIT)< 0)
+		noKinect = true;
+	printf("\tDepth Stream Started\n");
+
+	if (freenect_sync_get_video((void**) &rgb, &ts, 0, FREENECT_VIDEO_RGB) < 0)
+		noKinect = true;
+	printf("\tVideo Stream Started\n");
+
+	if(!noKinect)
+	{
+		printf("Kinect Succesfully Connected\n");
+		freenect_sync_set_led(LED_BLINK_GREEN ,0);
+		freenect_sync_set_tilt_degs(30,0);
+		boost::this_thread::sleep(boost::posix_time::seconds(1));
+		freenect_sync_set_tilt_degs(0,0);
+	}
+	else
+		printf("Failed to Communicate with Kinect");
+}
+
+void InitGL(int Width, int Height)
+{
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glEnable(GL_DEPTH_TEST);
+	glGenTextures(1, &gl_rgb_tex);
+	glBindTexture(GL_TEXTURE_2D, gl_rgb_tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	ResizeGLScene(Width, Height);
+}
+
 
 void mouseMoved(int x, int y)
 {
@@ -187,16 +234,51 @@ void ResizeGLScene(int w, int h)
 	glLoadIdentity();
 }
 
-void calcEulerFrom(float * q)
+
+void UpdateData()
 {
-	euler[0] = atan2(2 * q[1] * q[2] - 2 * q[0] * q[3],
-			2 * q[0] * q[0] + 2 * q[1] * q[1] - 1) * 180 / 3.14159625; //psi
-
-	euler[1] = -asin(2 * q[1] * q[3] + 2 * q[0] * q[2]) * 180 / 3.14159625; //theta
-
-	euler[2] = atan2(2 * q[2] * q[3] - 2 * q[0] * q[1],
-			2 * q[0] * q[0] + 2 * q[3] * q[3] - 1) * 180 / 3.14159625; //phi
+	getKinectData();
+	getQuaternionData();
+	glutPostRedisplay();
 }
+
+void getQuaternionData()
+{
+	if (!commError && displayQuat)
+	{
+		total++;
+		if (readQuat() > 0)
+		{
+			normalizeQuat();
+			if (homing)
+			{
+				float res[4];
+				quatProd(res, hQ, quat);
+				calcEulerFrom(res);
+			}
+			else
+			{
+				calcEulerFrom(quat);
+			}
+		}
+	}
+}
+
+void getKinectData()
+{
+	if (!noKinect && displayKinect)
+	{
+		if (freenect_sync_get_depth((void**) &depth, &ts, 0,FREENECT_DEPTH_11BIT) < 0)
+			noKinect = true;
+
+		if (freenect_sync_get_video((void**) &rgb, &ts, 0, FREENECT_VIDEO_RGB)
+				< 0)
+			noKinect = true;
+
+	}
+}
+
+
 
 int readQuat()
 {
@@ -241,6 +323,17 @@ int readQuat()
 	}
 }
 
+void calcEulerFrom(float * q)
+{
+	euler[0] = atan2(2 * q[1] * q[2] - 2 * q[0] * q[3],
+			2 * q[0] * q[0] + 2 * q[1] * q[1] - 1) * 180 / 3.14159625; //psi
+
+	euler[1] = -asin(2 * q[1] * q[3] + 2 * q[0] * q[2]) * 180 / 3.14159625; //theta
+
+	euler[2] = atan2(2 * q[2] * q[3] - 2 * q[0] * q[1],
+			2 * q[0] * q[0] + 2 * q[3] * q[3] - 1) * 180 / 3.14159625; //phi
+}
+
 void quatConj(float * result, float * q)
 {
 
@@ -272,47 +365,45 @@ void normalizeQuat()
 	quat[3] /= mag;
 }
 
-void getQuaternionData()
+
+
+void LoadVertexMatrix()
 {
-	if (!commError && displayQuat)
-	{
-		total++;
-		if (readQuat() > 0)
-		{
-			normalizeQuat();
-			if (homing)
-			{
-				float res[4];
-				quatProd(res, hQ, quat);
-				calcEulerFrom(res);
-			}
-			else
-			{
-				calcEulerFrom(quat);
-			}
-		}
-	}
+	float fx = 594.21f;
+	float fy = 591.04f;
+	float a = -0.0030711f;
+	float b = 3.3309495f;
+	float cx = 339.5f;
+	float cy = 242.7f;
+	GLfloat mat[16] =
+	{ 1 / fx, 0, 0, 0, 0, -1 / fy, 0, 0, 0, 0, 0, a, -cx / fx, cy / fy, -1, b };
+	glMultMatrixf(mat);
 }
 
-void getKinectData()
+void LoadRGBMatrix()
 {
-	if (!noKinect && displayKinect)
-	{
-		if (freenect_sync_get_depth((void**) &depth, &ts, 0,FREENECT_DEPTH_11BIT) < 0)
-			noKinect = true;
-
-		if (freenect_sync_get_video((void**) &rgb, &ts, 0, FREENECT_VIDEO_RGB)
-				< 0)
-			noKinect = true;
-
-	}
+	float mat[16] =
+	{ 5.34866271e+02, 3.89654806e+00, 0.00000000e+00, 1.74704200e-02,
+			-4.70724694e+00, -5.28843603e+02, 0.00000000e+00, -1.22753400e-02,
+			-3.19670762e+02, -2.60999685e+02, 0.00000000e+00, -9.99772000e-01,
+			-6.98445586e+00, 3.31139785e+00, 0.00000000e+00, 1.09167360e-02 };
+	glMultMatrixf(mat);
 }
 
-void UpdateData()
+
+void DrawGLScene()
 {
-	getKinectData();
-	getQuaternionData();
-	glutPostRedisplay();
+	glClearColor(0.0, 0.0, 0.0, 0.0);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	drawKinectCloud();
+	drawQuaternionCube();
+
+	if (displayDebug)
+		drawDebug();
+
+	glFlush();
+	glutSwapBuffers();
 }
 
 void print_bitmap_string(char* s, float x, float y)
@@ -601,143 +692,9 @@ void drawDebug()
 	}
 }
 
-void DrawGLScene()
-{
-	glClearColor(0.0, 0.0, 0.0, 0.0);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	drawKinectCloud();
-	drawQuaternionCube();
-
-	if (displayDebug)
-		drawDebug();
-
-	glFlush();
-	glutSwapBuffers();
-}
-
-void InitGL(int Width, int Height)
-{
-	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-	glEnable(GL_DEPTH_TEST);
-	glGenTextures(1, &gl_rgb_tex);
-	glBindTexture(GL_TEXTURE_2D, gl_rgb_tex);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	ResizeGLScene(Width, Height);
-}
-
-void initSerialComms()
-{
-	printf("Opening Serial Comms\n");
-	commError = 0;
-	sprintf(commMsg, "IMU connected");
-
-	try
-	{
-		myPort.open(port, baud);
-	} catch (...)
-	{
-	}
-
-	if (!myPort.isOpen())
-	{
-		sprintf(commMsg, "Failed %s @ %d bps", port, baud);
-		commError = 1;
-		printf(commMsg);
-		return;
-	}
-
-	boost::this_thread::sleep(boost::posix_time::milliseconds(500));
-
-	printf("\tSending WHOAMI\n");
-	myPort.write("????.", 5);
-	myPort.flush();
-
-	boost::this_thread::sleep(boost::posix_time::seconds(1));
-
-	std::string response = myPort.readStringUntil("\r\n");
-
-	printf("\tResponse: %s\n", response.c_str());
-
-	int numBytes = strlen(response.c_str());
-
-	if (numBytes > 0)
-	{
-		if (response.compare("I am an AHRSuIMU") == 0)
-		{
-			sprintf(commMsg, "IMU Connected");
-			commError = 0;
-		}
-
-		else
-		{
-			sprintf(commMsg, "Unexpected IMU Response");
-			commError = 2;
-		}
-	}
-
-	else
-	{
-		sprintf(commMsg, "No IMU Response");
-		commError = 3;
-	}
-
-	printf("%s\n\n",commMsg);
-	return;
-}
-
-void initKinectComms()
-{
-	printf("Initialising Kinect\n");
-	noKinect = false;
 
 
-	if (freenect_sync_get_depth((void**) &depth, &ts, 0, FREENECT_DEPTH_11BIT)< 0)
-		noKinect = true;
-	printf("\tDepth Stream Started\n");
 
-	if (freenect_sync_get_video((void**) &rgb, &ts, 0, FREENECT_VIDEO_RGB) < 0)
-		noKinect = true;
-	printf("\tVideo Stream Started\n");
 
-	if(!noKinect)
-	{
-		printf("Kinect Succesfully Connected\n");
-		freenect_sync_set_led(LED_BLINK_GREEN ,0);
-		freenect_sync_set_tilt_degs(30,0);
-		boost::this_thread::sleep(boost::posix_time::seconds(1));
-		freenect_sync_set_tilt_degs(0,0);
-	}
-	else
-		printf("Failed to Communicate with Kinect");
-}
 
-int main(int argc, char **argv)
-{
-	initSerialComms();
-	initKinectComms();
-
-	width = 640;
-	height = 480;
-	glutInit(&argc, argv);
-
-	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
-	glutInitWindowSize(width, height);
-	glutInitWindowPosition(0, 0);
-
-	window = glutCreateWindow("LibFreenect");
-
-	glutDisplayFunc(&DrawGLScene);
-	glutIdleFunc(&UpdateData);
-	glutReshapeFunc(&ResizeGLScene);
-	glutKeyboardFunc(&keyPressed);
-	glutMotionFunc(&mouseMoved);
-	glutMouseFunc(&mousePress);
-	InitGL(width, height);
-
-	glutMainLoop();
-
-	return 0;
-}
 
