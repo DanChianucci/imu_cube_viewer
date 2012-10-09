@@ -5,8 +5,9 @@
 //				 as an IMU and displays relevant data onscreen.
 //============================================================================
 #include "Topography.h"
+#include <iostream>
 
-
+using namespace std;
 
 int main(int argc, char **argv)
 {
@@ -38,88 +39,57 @@ int main(int argc, char **argv)
 
 void initSerialComms()
 {
-	printf("Opening Serial Comms\n");
-	commError = 0;
-	sprintf(commMsg, "IMU connected\n");
+	cout<<"Opening Serial Comms"<<endl;
+	//Unless there is an error, assume its connected
 
 	try
 	{
 		myPort.open(port, baud);
-	} catch (...)
-	{
 	}
+	catch (...){}
 
 	if (!myPort.isOpen())
 	{
-		sprintf(commMsg, "Failed %s @ %d bps\n", port, baud);
+		sprintf(commMsg, "Failed %s @ %d bps", port, baud);
 		commError = 1;
-		printf(commMsg);
+		cerr<<commMsg<<endl;
 		return;
 	}
-
-	boost::this_thread::sleep(boost::posix_time::milliseconds(500));
-
-	printf("\tSending WHOAMI\n");
-	myPort.write("????.", 5);
-	myPort.flush();
-
-	boost::this_thread::sleep(boost::posix_time::seconds(1));
-
-	std::string response = myPort.readStringUntil("\r\n");
-
-	printf("\tResponse: %s\n", response.c_str());
-
-	int numBytes = strlen(response.c_str());
-
-	if (numBytes > 0)
-	{
-		if (response.compare("I am an AHRSuIMU") == 0)
-		{
-			sprintf(commMsg, "IMU Connected");
-			commError = 0;
-		}
-
-		else
-		{
-			sprintf(commMsg, "Unexpected IMU Response");
-			commError = 2;
-		}
-	}
-
 	else
 	{
-		sprintf(commMsg, "No IMU Response");
-		commError = 3;
+		commError = 0;
+		sprintf(commMsg,"IMU connected");
+		cout<<commMsg<<endl;
+		return;
 	}
-
-	printf("%s\n\n",commMsg);
-	return;
 }
 
 void initKinectComms()
 {
-	printf("Initialising Kinect\n");
+	cout<<"Initialising Kinect"<<endl;
 	noKinect = false;
 
 
 	if (freenect_sync_get_depth((void**) &depth, &ts, 0, FREENECT_DEPTH_11BIT)< 0)
 		noKinect = true;
-	printf("\tDepth Stream Started\n");
+	else
+		cout<<"\tDepth Stream Started"<<endl;
 
 	if (freenect_sync_get_video((void**) &rgb, &ts, 0, FREENECT_VIDEO_RGB) < 0)
 		noKinect = true;
-	printf("\tVideo Stream Started\n");
+	else
+		cout<<"\tVideo Stream Started"<<endl;
 
 	if(!noKinect)
 	{
-		printf("Kinect Succesfully Connected\n");
+		cout<<"Kinect Succesfully Connected"<<endl;
 		freenect_sync_set_led(LED_BLINK_GREEN ,0);
 		freenect_sync_set_tilt_degs(30,0);
 		boost::this_thread::sleep(boost::posix_time::seconds(1));
 		freenect_sync_set_tilt_degs(0,0);
 	}
 	else
-		printf("Failed to Communicate with Kinect");
+		cerr<<"Failed to Communicate with Kinect"<<endl;
 }
 
 void InitGL(int Width, int Height)
@@ -301,24 +271,26 @@ int readQuat()
 			try
 			{
 				tmp[i] = boost::lexical_cast<float>(Qs[i]);
-			} catch (...)
+			}
+			catch (...)
 			{
 				missed++;
-				printf("Bad Lexical Cast");
-				printf("%d < %s , %s , %s , %s >\n", i, Qs[0].c_str(),
-						Qs[1].c_str(), Qs[2].c_str(), Qs[3].c_str());
+				cerr<<"Bad Lexical Cast"<<i<<": < "<<Qs[0]<<" , "<<Qs[1]<<" , "<<Qs[2]<<" , "<<Qs[3]<<endl;
 				return -2;
 			}
 		}
+
 		for (int i = 0; i <= 3; i++)
 		{
 			quat[i] = tmp[i];
 		}
 		return 1;
 	}
+
 	else
 	{
 		missed++;
+		cerr<<"Missed"<<endl;
 		return -1;
 	}
 }
