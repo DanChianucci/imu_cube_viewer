@@ -82,7 +82,8 @@ void BufferedAsyncSerial::readCallback(const char *data, size_t len)
 std::vector<char>::iterator BufferedAsyncSerial::findStringInVector(
         std::vector<char>& v,const std::string& s)
 {
-    if(s.size()==0) return v.end();
+    if(s.size()==0)
+    	return v.end();
 
     vector<char>::iterator it=v.begin();
     for(;;)

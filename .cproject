@@ -106,7 +106,6 @@
 								<option id="gnu.cpp.compiler.option.include.paths.266513414" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;C:\Program Files (x86)\libfreenect\include\libfreenect&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:\Libraries\boost_1_50_0&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;C:\Libraries\Serial&quot;"/>
 								</option>
 								<option id="gnu.cpp.compiler.option.warnings.nowarn.1308546229" name="Inhibit all warnings (-w)" superClass="gnu.cpp.compiler.option.warnings.nowarn" value="true" valueType="boolean"/>
 								<option id="gnu.cpp.compiler.option.warnings.allwarn.179539466" name="All warnings (-Wall)" superClass="gnu.cpp.compiler.option.warnings.allwarn" value="false" valueType="boolean"/>
