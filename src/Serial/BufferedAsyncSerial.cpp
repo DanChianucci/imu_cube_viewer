@@ -35,6 +35,13 @@ BufferedAsyncSerial::BufferedAsyncSerial(const std::string& devname,
     setReadCallback(boost::bind(&BufferedAsyncSerial::readCallback, this, _1, _2));
 }
 
+
+size_t BufferedAsyncSerial::available() const
+{
+	lock_guard<mutex> l(readQueueMutex);
+	return readQueue.size();
+}
+
 size_t BufferedAsyncSerial::read(char *data, size_t size)
 {
     lock_guard<mutex> l(readQueueMutex);

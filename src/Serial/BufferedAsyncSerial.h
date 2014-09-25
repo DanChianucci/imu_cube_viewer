@@ -40,6 +40,12 @@ public:
                 boost::asio::serial_port_base::stop_bits::one));
 
     /**
+     * Returns the number of bytes available to be read
+     * @return the siize of the read queue
+     */
+    size_t available() const;
+
+    /**
      * Read some data asynchronously. Returns immediately.
      * \param data array of char to be read through the serial device
      * \param size array size
