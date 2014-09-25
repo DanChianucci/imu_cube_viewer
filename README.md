@@ -1,4 +1,4 @@
-3D-MAPPER
+Rotation
 =========
 
-The Beginings of a 3D-Mapper using the MARGS board w/ IMU s/w and a Kinect
+An IMU Tracker which displays a cube rotating in 3D space according to the IMU quaterion value
